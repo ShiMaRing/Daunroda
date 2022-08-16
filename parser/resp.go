@@ -3,7 +3,10 @@ package parser
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/jackpal/bencode-go"
 	"net"
+	"net/http"
+	"time"
 )
 
 // Peer 提供tracker服务器的响应解析
@@ -37,4 +40,25 @@ func Unmarshal(peersBin []byte) ([]Peer, error) {
 	}
 	return peers, nil
 
+}
+
+//获取到url之后，发起get请求并解析列表
+func (t *TorrentFile) requestPeers(peerID [20]byte, port uint16) ([]Peer, error) {
+	trackerURL, err := t.buildTrackerURL(peerID, port)
+	if err != nil {
+		return nil, err
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(trackerURL)
+	defer resp.Body.Close()
+	if err != nil {
+		return nil, err
+	} //尝试获取信息
+
+	result := make(map[string]interface{})
+	err = bencode.Unmarshal(resp.Body, result)
+	if err != nil {
+		return nil, err
+	}
+	return Unmarshal([]byte(result["peers"].(string)))
 }
