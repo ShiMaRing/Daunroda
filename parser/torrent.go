@@ -1,12 +1,15 @@
 package parser
 
 import (
+	"bitDownloader/downloader"
 	"bytes"
 	"crypto/sha1"
 	"fmt"
 	"github.com/jackpal/bencode-go"
 	"io"
+	"math/rand"
 	"net/url"
+	"os"
 	"strconv"
 )
 
@@ -78,7 +81,7 @@ func Open(r io.Reader) (*BencodeTorrent, error) {
 }
 
 //转化方法
-func (bto BencodeTorrent) toTorrentFile() (TorrentFile, error) {
+func (bto BencodeTorrent) ToTorrentFile() (TorrentFile, error) {
 
 	hash, err := bto.Info.hash()
 	if err != nil {
@@ -100,6 +103,45 @@ func (bto BencodeTorrent) toTorrentFile() (TorrentFile, error) {
 		Name:        bto.Info.Name,
 	}
 	return t, nil
+}
+
+// DownloadToFile downloads a torrent and writes it to a file
+func (t *TorrentFile) DownloadToFile(path string) error {
+	var peerID [20]byte
+	_, err := rand.Read(peerID[:])
+	if err != nil {
+		return err
+	}
+
+	peers, err := t.requestPeers(peerID, 6881)
+	if err != nil {
+		return err
+	}
+
+	torrent := downloader.Torrent{
+		Peers:       peers,
+		PeerID:      peerID,
+		InfoHash:    t.InfoHash,
+		PieceHashes: t.PieceHashes,
+		PieceLength: t.PieceLength,
+		Length:      t.Length,
+		Name:        t.Name,
+	}
+	buf, err := torrent.Download()
+	if err != nil {
+		return err
+	}
+
+	outFile, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer outFile.Close()
+	_, err = outFile.Write(buf)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 //接下来需要向服务器声明作为一个种子接收者，并且需要发送get请求，携带相关参数

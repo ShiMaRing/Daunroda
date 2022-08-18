@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"bitDownloader/peer"
 	"encoding/binary"
 	"fmt"
 	"github.com/jackpal/bencode-go"
@@ -9,16 +10,8 @@ import (
 	"time"
 )
 
-// Peer 提供tracker服务器的响应解析
-//服务器将会返回相关列表，其中包括了ip以及端口
-//一个长连接，每六个字节对应一个peer
-type Peer struct {
-	Ip   net.IP
-	Port uint16
-}
-
 // Unmarshal parses peer IP addresses and ports from a buffer
-func Unmarshal(peersBin []byte) ([]Peer, error) {
+func Unmarshal(peersBin []byte) ([]peer.Peer, error) {
 	//服务器响应的bin解析
 	const peerSize = 6
 	//peersBin代指的是传回的响应的第二个字段，第一个字段为请求重复时间
@@ -27,9 +20,9 @@ func Unmarshal(peersBin []byte) ([]Peer, error) {
 		return nil, fmt.Errorf("Received malformed peers")
 	}
 
-	peers := make([]Peer, numPeers)
+	peers := make([]peer.Peer, numPeers)
 	for i := 0; i < numPeers; i++ {
-		var peer Peer
+		var peer peer.Peer
 		var tmp []byte
 		copy(tmp, peersBin[i*peerSize:(i+1)*peerSize])
 		ip := net.IP(tmp[0:4])
@@ -43,17 +36,20 @@ func Unmarshal(peersBin []byte) ([]Peer, error) {
 }
 
 //获取到url之后，发起get请求并解析列表
-func (t *TorrentFile) requestPeers(peerID [20]byte, port uint16) ([]Peer, error) {
+func (t *TorrentFile) requestPeers(peerID [20]byte, port uint16) ([]peer.Peer, error) {
 	trackerURL, err := t.buildTrackerURL(peerID, port)
 	if err != nil {
 		return nil, err
 	}
+
+	fmt.Println(trackerURL)
+
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Get(trackerURL)
-	defer resp.Body.Close()
 	if err != nil {
 		return nil, err
 	} //尝试获取信息
+	defer resp.Body.Close()
 
 	result := make(map[string]interface{})
 	err = bencode.Unmarshal(resp.Body, result)
